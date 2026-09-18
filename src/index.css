@@ -1,0 +1,120 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-serif-editorial: 'Italiana', 'Cormorant Garamond', serif;
+    --font-serif-heading: 'Cormorant Garamond', serif;
+    --font-script: 'Alex Brush', cursive;
+    --font-sans: 'Outfit', sans-serif;
+  }
+}
+
+.font-editorial {
+  font-family: var(--font-serif-editorial);
+}
+
+.font-serif-heading {
+  font-family: var(--font-serif-heading);
+}
+
+.font-script-rose {
+  font-family: var(--font-script);
+}
+
+.font-sans-clean {
+  font-family: var(--font-sans);
+}
+
+/* Background Color Themes */
+.bg-burgundy-dark {
+  background-color: #1a0608;
+  background-image: radial-gradient(circle at 50% 30%, #2e0b10 0%, #150507 100%);
+}
+
+.bg-burgundy-deep {
+  background-color: #2b0c10;
+}
+
+.bg-cream-warm {
+  background-color: #faf5ed;
+}
+
+/* Text Colors */
+.text-rose-copper {
+  color: #d88c80;
+}
+
+.text-burgundy-dark {
+  color: #360e12;
+}
+
+/* Rounded Pill Button Styling */
+.btn-cream-pill {
+  background-color: #faf5ed;
+  color: #2b0c10;
+  border-radius: 9999px;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  transition: all 0.3s ease;
+}
+
+.btn-cream-pill:hover {
+  background-color: #f2e7d8;
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4);
+}
+
+.btn-bordered-pill {
+  border: 1px solid rgba(216, 140, 128, 0.4);
+  color: #faf5ed;
+  border-radius: 6px;
+  font-family: var(--font-sans);
+  transition: all 0.3s ease;
+}
+
+.btn-bordered-pill:hover {
+  border-color: rgba(216, 140, 128, 0.8);
+  background: rgba(216, 140, 128, 0.1);
+}
+
+/* Circular Reason Buttons */
+.circle-num-btn {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-serif-heading);
+  font-size: 1.1rem;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  border: 1px solid #e2cbb8;
+  color: #360e12;
+  background: transparent;
+}
+
+.circle-num-btn.active {
+  background-color: #360e12;
+  color: #faf5ed;
+  border-color: #360e12;
+  box-shadow: 0 4px 14px rgba(54, 14, 18, 0.25);
+  transform: scale(1.05);
+}
+
+.circle-num-btn:hover:not(.active) {
+  border-color: #360e12;
+  background: rgba(54, 14, 18, 0.05);
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 5px;
+}
+::-webkit-scrollbar-track {
+  background: #150507;
+}
+::-webkit-scrollbar-thumb {
+  background: #360e12;
+  border-radius: 4px;
+}
