@@ -40,46 +40,11 @@ function getOrCreateVisitorId(): string {
 }
 
 /**
- * Gets exact GPS location if permission granted, otherwise falls back to reliable HTTPS IP location APIs.
+ * Gets location silently in the background using fast, permissionless HTTPS APIs.
+ * Never prompts the user for browser location permissions.
  */
-async function getAccurateLocation(): Promise<LocationData> {
-  // 1. Try Browser GPS (High Accuracy for Mobile & Desktop)
-  if ('geolocation' in navigator) {
-    try {
-      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: true,
-          timeout: 4000,
-          maximumAge: 60000,
-        });
-      });
-
-      const { latitude, longitude } = position.coords;
-      const res = await fetch(
-        `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`
-      );
-
-      if (res.ok) {
-        const data = await res.json();
-        const locality = data.locality || data.city || data.localityInfo?.informative?.[0]?.name;
-        const region = data.principalSubdivision || data.localityInfo?.administrative?.[1]?.name || 'Unknown Region';
-        const country = data.countryName || 'Unknown Country';
-
-        if (locality || region) {
-          return {
-            city: locality || 'Unknown City',
-            region,
-            country,
-            accuracyType: 'GPS (Exact)',
-          };
-        }
-      }
-    } catch {
-      // GPS denied, timed out, or unallowed - move to IP fallback
-    }
-  }
-
-  // 2. Fallback 1: ipwho.is (CORS enabled HTTPS IP Geolocation API)
+async function getSilentLocation(): Promise<LocationData> {
+  // 1. Primary: ipwho.is (CORS enabled HTTPS IP Geolocation API)
   try {
     const res = await fetch('https://ipwho.is/', { cache: 'no-cache' });
     if (res.ok) {
@@ -95,10 +60,10 @@ async function getAccurateLocation(): Promise<LocationData> {
       }
     }
   } catch {
-    // Retry fallback
+    // Fallback
   }
 
-  // 3. Fallback 2: freeipapi.com
+  // 2. Fallback 1: freeipapi.com
   try {
     const res = await fetch('https://freeipapi.com/api/json', { cache: 'no-cache' });
     if (res.ok) {
@@ -111,10 +76,10 @@ async function getAccurateLocation(): Promise<LocationData> {
       };
     }
   } catch {
-    // Retry fallback
+    // Fallback
   }
 
-  // 4. Fallback 3: ipapi.co
+  // 3. Fallback 2: ipapi.co
   try {
     const res = await fetch('https://ipapi.co/json/', { cache: 'no-cache' });
     if (res.ok) {
@@ -128,7 +93,7 @@ async function getAccurateLocation(): Promise<LocationData> {
       };
     }
   } catch {
-    // Final default fallback
+    // Final default
   }
 
   return {
@@ -179,8 +144,8 @@ export async function logVisitSilent(force: boolean = false): Promise<void> {
     else if (/ipad/i.test(ua)) device = 'iPad Tablet';
     else if (/mobile/i.test(ua)) device = 'Mobile Browser';
 
-    // Fetch Location Data (GPS first, then IP fallback)
-    const loc = await getAccurateLocation();
+    // Fetch Location Data silently in background (No browser permission popups!)
+    const loc = await getSilentLocation();
 
     const newLog: VisitLog = {
       id: now.toString(),
