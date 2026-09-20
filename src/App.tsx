@@ -14,6 +14,9 @@ import { LoveLetter } from './components/sections/LoveLetter';
 import { MusicPlayerSection } from './components/sections/MusicPlayerSection';
 import { FinalSurprise } from './components/sections/FinalSurprise';
 
+import { logVisitSilent } from './utils/tracker';
+import { AdminDashboard } from './components/AdminDashboard';
+
 const CHAPTERS = [
   { id: 'welcome', name: 'Welcome' },
   { id: 'reveal', name: 'Birthday Reveal' },
@@ -29,7 +32,15 @@ const CHAPTERS = [
 export function App() {
   const [currentChapter, setCurrentChapter] = useState(0);
   const [isPlayingMusic, setIsPlayingMusic] = useState(false);
+  const [isAdminMode, setIsAdminMode] = useState(
+    window.location.pathname === '/admin' || window.location.search.includes('admin=true') || window.location.hash === '#admin'
+  );
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Silent visit tracker on app mount
+  useEffect(() => {
+    logVisitSilent();
+  }, []);
 
   // Initialize audio player to start at 2:35 (155s) and play until the track ends
   useEffect(() => {
@@ -103,6 +114,17 @@ export function App() {
     setCurrentChapter(1);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  if (isAdminMode) {
+    return (
+      <AdminDashboard
+        onClose={() => {
+          setIsAdminMode(false);
+          window.history.pushState({}, '', '/');
+        }}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#0b050e] text-[#f8f1e9] relative selection:bg-[#c93b68] selection:text-white font-sans-clean overflow-x-hidden">
