@@ -206,11 +206,23 @@ export function AdminDashboard({ onClose }: AdminDashboardProps) {
                   </div>
                 </div>
 
-                <div className="text-right sm:self-center">
+                <div className="text-right sm:self-center flex flex-col items-end gap-1.5">
                   <span className="inline-flex items-center gap-1.5 text-xs text-white/70 font-mono bg-white/5 px-3 py-1.5 rounded-lg border border-white/10">
                     <Clock className="w-3.5 h-3.5 text-rose-copper" />
                     {log.timestamp}
                   </span>
+                  {log.visitCount && (
+                    <div className="flex items-center gap-2 text-[11px] font-sans-clean">
+                      <span className="bg-rose-copper/20 text-rose-copper px-2 py-0.5 rounded border border-rose-copper/30 font-semibold">
+                        {log.visitCount === 1 ? 'First Visit' : `Revisit #${log.visitCount}`}
+                      </span>
+                      {log.timeSinceLastVisit && log.timeSinceLastVisit !== 'First Visit' && (
+                        <span className="text-white/50 text-[10px]">
+                          ({log.timeSinceLastVisit})
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}

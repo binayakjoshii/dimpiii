@@ -1,6 +1,9 @@
 export interface VisitLog {
   id: string;
+  visitorId: string;
+  visitCount: number;
   timestamp: string;
+  timeSinceLastVisit?: string;
   city: string;
   region: string;
   country: string;
@@ -13,6 +16,7 @@ export interface VisitLog {
 const STORAGE_KEY = 'dimpi_birthday_visit_logs';
 const BUCKET_ID = 'dimpi_bday_logs_965bf973';
 const KV_ENDPOINT = `https://kvdb.io/${BUCKET_ID}/visit_logs`;
+const REVISIT_COOLDOWN_MS = 2 * 60 * 1000; // 2 minutes (120,000 ms)
 
 interface LocationData {
   city: string;
@@ -20,6 +24,19 @@ interface LocationData {
   country: string;
   accuracyType: 'GPS (Exact)' | 'IP (Approximate)';
   isp?: string;
+}
+
+function getOrCreateVisitorId(): string {
+  try {
+    let vid = localStorage.getItem('dimpi_visitor_id');
+    if (!vid) {
+      vid = 'v_' + Math.random().toString(36).substring(2, 9) + '_' + Date.now().toString(36).substring(4);
+      localStorage.setItem('dimpi_visitor_id', vid);
+    }
+    return vid;
+  } catch {
+    return 'v_guest';
+  }
 }
 
 /**
@@ -122,10 +139,37 @@ async function getAccurateLocation(): Promise<LocationData> {
   };
 }
 
-export async function logVisitSilent(): Promise<void> {
+export async function logVisitSilent(force: boolean = false): Promise<void> {
   try {
-    const sessionLogged = sessionStorage.getItem('dimpi_session_logged');
-    if (sessionLogged) return;
+    const now = Date.now();
+    const lastVisitStr = localStorage.getItem('dimpi_last_visit_timestamp');
+    const lastVisitTime = lastVisitStr ? parseInt(lastVisitStr, 10) : 0;
+
+    // Check if 2 minutes have passed since last recorded log (unless forced)
+    if (!force && lastVisitTime > 0 && now - lastVisitTime < REVISIT_COOLDOWN_MS) {
+      return;
+    }
+
+    const visitorId = getOrCreateVisitorId();
+    const prevCountStr = localStorage.getItem('dimpi_visit_count');
+    const visitCount = (prevCountStr ? parseInt(prevCountStr, 10) : 0) + 1;
+
+    // Calculate human-friendly time since last visit
+    let timeSinceLastVisit = 'First Visit';
+    if (lastVisitTime > 0) {
+      const diffMs = now - lastVisitTime;
+      const diffMins = Math.floor(diffMs / (1000 * 60));
+      const diffHours = Math.floor(diffMins / 60);
+      const diffDays = Math.floor(diffHours / 24);
+
+      if (diffDays > 0) {
+        timeSinceLastVisit = `${diffDays}d ${diffHours % 24}h later`;
+      } else if (diffHours > 0) {
+        timeSinceLastVisit = `${diffHours}h ${diffMins % 60}m later`;
+      } else {
+        timeSinceLastVisit = `${diffMins} min${diffMins !== 1 ? 's' : ''} later`;
+      }
+    }
 
     // Detect device type
     const ua = navigator.userAgent;
@@ -139,11 +183,14 @@ export async function logVisitSilent(): Promise<void> {
     const loc = await getAccurateLocation();
 
     const newLog: VisitLog = {
-      id: Date.now().toString(),
+      id: now.toString(),
+      visitorId,
+      visitCount,
       timestamp: new Date().toLocaleString('en-US', {
         dateStyle: 'medium',
         timeStyle: 'short',
       }),
+      timeSinceLastVisit,
       city: loc.city,
       region: loc.region,
       country: loc.country,
@@ -152,11 +199,14 @@ export async function logVisitSilent(): Promise<void> {
       isp: loc.isp,
     };
 
+    // Update local timestamps and counters
+    localStorage.setItem('dimpi_last_visit_timestamp', now.toString());
+    localStorage.setItem('dimpi_visit_count', visitCount.toString());
+
     // 1. Save to local browser storage
     const localLogs = getLocalLogs();
     localLogs.unshift(newLog);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(localLogs.slice(0, 100)));
-    sessionStorage.setItem('dimpi_session_logged', 'true');
 
     // 2. Save to shared cloud database (kvdb.io)
     try {
@@ -213,6 +263,8 @@ export async function getVisitLogs(): Promise<VisitLog[]> {
 
 export async function clearVisitLogs(): Promise<void> {
   localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem('dimpi_last_visit_timestamp');
+  localStorage.removeItem('dimpi_visit_count');
   try {
     await fetch(KV_ENDPOINT, {
       method: 'POST',
@@ -223,4 +275,5 @@ export async function clearVisitLogs(): Promise<void> {
     // Ignore
   }
 }
+
 

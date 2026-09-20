@@ -37,9 +37,25 @@ export function App() {
   );
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Silent visit tracker on app mount
+  // Silent visit tracker on app mount, tab visibility change, & periodic 1-min checks
   useEffect(() => {
     logVisitSilent();
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        logVisitSilent();
+      }
+    };
+
+    const interval = setInterval(() => {
+      logVisitSilent();
+    }, 60000);
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      clearInterval(interval);
+    };
   }, []);
 
   // Initialize audio player to start at 2:35 (155s) and play until the track ends
