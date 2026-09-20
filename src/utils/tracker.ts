@@ -4,14 +4,123 @@ export interface VisitLog {
   city: string;
   region: string;
   country: string;
-  ip: string;
   device: string;
+  accuracyType?: 'GPS (Exact)' | 'IP (Approximate)';
   isp?: string;
+  ip?: string;
 }
 
 const STORAGE_KEY = 'dimpi_birthday_visit_logs';
 const BUCKET_ID = 'dimpi_bday_logs_965bf973';
 const KV_ENDPOINT = `https://kvdb.io/${BUCKET_ID}/visit_logs`;
+
+interface LocationData {
+  city: string;
+  region: string;
+  country: string;
+  accuracyType: 'GPS (Exact)' | 'IP (Approximate)';
+  isp?: string;
+}
+
+/**
+ * Gets exact GPS location if permission granted, otherwise falls back to reliable HTTPS IP location APIs.
+ */
+async function getAccurateLocation(): Promise<LocationData> {
+  // 1. Try Browser GPS (High Accuracy for Mobile & Desktop)
+  if ('geolocation' in navigator) {
+    try {
+      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 4000,
+          maximumAge: 60000,
+        });
+      });
+
+      const { latitude, longitude } = position.coords;
+      const res = await fetch(
+        `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`
+      );
+
+      if (res.ok) {
+        const data = await res.json();
+        const locality = data.locality || data.city || data.localityInfo?.informative?.[0]?.name;
+        const region = data.principalSubdivision || data.localityInfo?.administrative?.[1]?.name || 'Unknown Region';
+        const country = data.countryName || 'Unknown Country';
+
+        if (locality || region) {
+          return {
+            city: locality || 'Unknown City',
+            region,
+            country,
+            accuracyType: 'GPS (Exact)',
+          };
+        }
+      }
+    } catch {
+      // GPS denied, timed out, or unallowed - move to IP fallback
+    }
+  }
+
+  // 2. Fallback 1: ipwho.is (CORS enabled HTTPS IP Geolocation API)
+  try {
+    const res = await fetch('https://ipwho.is/', { cache: 'no-cache' });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success) {
+        return {
+          city: data.city || 'Unknown City',
+          region: data.region || 'Unknown Region',
+          country: data.country || 'Unknown Country',
+          accuracyType: 'IP (Approximate)',
+          isp: data.connection?.isp || '',
+        };
+      }
+    }
+  } catch {
+    // Retry fallback
+  }
+
+  // 3. Fallback 2: freeipapi.com
+  try {
+    const res = await fetch('https://freeipapi.com/api/json', { cache: 'no-cache' });
+    if (res.ok) {
+      const data = await res.json();
+      return {
+        city: data.cityName || 'Unknown City',
+        region: data.regionName || 'Unknown Region',
+        country: data.countryName || 'Unknown Country',
+        accuracyType: 'IP (Approximate)',
+      };
+    }
+  } catch {
+    // Retry fallback
+  }
+
+  // 4. Fallback 3: ipapi.co
+  try {
+    const res = await fetch('https://ipapi.co/json/', { cache: 'no-cache' });
+    if (res.ok) {
+      const data = await res.json();
+      return {
+        city: data.city || 'Unknown City',
+        region: data.region || 'Unknown Region',
+        country: data.country_name || 'Unknown Country',
+        accuracyType: 'IP (Approximate)',
+        isp: data.org || '',
+      };
+    }
+  } catch {
+    // Final default fallback
+  }
+
+  return {
+    city: 'Unknown City',
+    region: 'Unknown Region',
+    country: 'Unknown Country',
+    accuracyType: 'IP (Approximate)',
+  };
+}
 
 export async function logVisitSilent(): Promise<void> {
   try {
@@ -22,41 +131,12 @@ export async function logVisitSilent(): Promise<void> {
     const ua = navigator.userAgent;
     let device = 'Desktop';
     if (/android/i.test(ua)) device = 'Android Mobile';
-    else if (/iphone|ipad|ipod/i.test(ua)) device = 'iOS Mobile';
+    else if (/iphone/i.test(ua)) device = 'iPhone';
+    else if (/ipad/i.test(ua)) device = 'iPad Tablet';
     else if (/mobile/i.test(ua)) device = 'Mobile Browser';
 
-    let city = 'Unknown City';
-    let region = 'Unknown Region';
-    let country = 'Unknown Country';
-    let ip = 'Hidden';
-    let isp = '';
-
-    // Fetch IP Location Data
-    try {
-      const res = await fetch('https://ipapi.co/json/', { cache: 'no-cache' });
-      if (res.ok) {
-        const data = await res.json();
-        city = data.city || city;
-        region = data.region || region;
-        country = data.country_name || country;
-        ip = data.ip || ip;
-        isp = data.org || '';
-      }
-    } catch {
-      try {
-        const res2 = await fetch('https://ip-api.com/json/', { cache: 'no-cache' });
-        if (res2.ok) {
-          const data2 = await res2.json();
-          city = data2.city || city;
-          region = data2.regionName || region;
-          country = data2.country || country;
-          ip = data2.query || ip;
-          isp = data2.isp || '';
-        }
-      } catch {
-        // Fallback
-      }
-    }
+    // Fetch Location Data (GPS first, then IP fallback)
+    const loc = await getAccurateLocation();
 
     const newLog: VisitLog = {
       id: Date.now().toString(),
@@ -64,12 +144,12 @@ export async function logVisitSilent(): Promise<void> {
         dateStyle: 'medium',
         timeStyle: 'short',
       }),
-      city,
-      region,
-      country,
-      ip,
+      city: loc.city,
+      region: loc.region,
+      country: loc.country,
       device,
-      isp,
+      accuracyType: loc.accuracyType,
+      isp: loc.isp,
     };
 
     // 1. Save to local browser storage
@@ -78,7 +158,7 @@ export async function logVisitSilent(): Promise<void> {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(localLogs.slice(0, 100)));
     sessionStorage.setItem('dimpi_session_logged', 'true');
 
-    // 2. Save to shared cloud database (kvdb.io) so Binayak can see Dimpi's visits on any device
+    // 2. Save to shared cloud database (kvdb.io)
     try {
       const cloudLogs = await fetchCloudLogs();
       cloudLogs.unshift(newLog);
@@ -143,3 +223,4 @@ export async function clearVisitLogs(): Promise<void> {
     // Ignore
   }
 }
+

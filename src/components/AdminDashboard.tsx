@@ -170,19 +170,38 @@ export function AdminDashboard({ onClose }: AdminDashboardProps) {
                     <MapPin className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="font-sans-clean text-base font-semibold text-white flex items-center gap-2">
+                    <h3 className="font-sans-clean text-base font-semibold text-white flex flex-wrap items-center gap-2">
                       <span>{log.city}, {log.region}</span>
                       <span className="text-xs font-mono text-rose-copper bg-rose-copper/10 px-2 py-0.5 rounded border border-rose-copper/20">
                         {log.country}
                       </span>
+                      {log.accuracyType && (
+                        <span className={`text-[10px] font-sans-clean px-2 py-0.5 rounded-full border ${
+                          log.accuracyType === 'GPS (Exact)' 
+                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' 
+                            : 'bg-amber-500/10 text-amber-300 border-amber-500/30'
+                        }`}>
+                          {log.accuracyType}
+                        </span>
+                      )}
                     </h3>
                     <p className="text-xs text-white/60 font-sans-clean mt-1 flex items-center gap-3">
                       <span className="flex items-center gap-1">
                         <Smartphone className="w-3 h-3 text-white/40" />
                         {log.device}
                       </span>
-                      <span>•</span>
-                      <span>IP: {log.ip}</span>
+                      {log.isp && (
+                        <>
+                          <span>•</span>
+                          <span>Network: {log.isp}</span>
+                        </>
+                      )}
+                      {log.ip && (
+                        <>
+                          <span>•</span>
+                          <span>IP: {log.ip}</span>
+                        </>
+                      )}
                     </p>
                   </div>
                 </div>
