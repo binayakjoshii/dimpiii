@@ -15,9 +15,14 @@ export function AdminDashboard({ onClose }: AdminDashboardProps) {
   const [errorMsg, setErrorMsg] = useState('');
   const [logs, setLogs] = useState<VisitLog[]>([]);
 
+  const loadLogs = async () => {
+    const data = await getVisitLogs();
+    setLogs(data);
+  };
+
   useEffect(() => {
     if (isAuthenticated) {
-      setLogs(getVisitLogs());
+      loadLogs();
     }
   }, [isAuthenticated]);
 
@@ -31,15 +36,15 @@ export function AdminDashboard({ onClose }: AdminDashboardProps) {
     }
   };
 
-  const handleClear = () => {
+  const handleClear = async () => {
     if (window.confirm('Are you sure you want to clear all visit logs?')) {
-      clearVisitLogs();
+      await clearVisitLogs();
       setLogs([]);
     }
   };
 
   const handleRefresh = () => {
-    setLogs(getVisitLogs());
+    loadLogs();
   };
 
   if (!isAuthenticated) {
