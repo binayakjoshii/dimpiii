@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Shield, Lock, Trash2, RefreshCw, MapPin, Smartphone, Clock, ArrowLeft } from 'lucide-react';
+import { Shield, Lock, Trash2, RefreshCw, MapPin, Smartphone, Clock, ArrowLeft, ExternalLink } from 'lucide-react';
 import { getVisitLogs, clearVisitLogs } from '../utils/tracker';
 import type { VisitLog } from '../utils/tracker';
 
@@ -203,6 +203,18 @@ export function AdminDashboard({ onClose }: AdminDashboardProps) {
                         </>
                       )}
                     </p>
+
+                    {log.mapsUrl && (
+                      <a
+                        href={log.mapsUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 mt-2 text-xs text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 px-3 py-1 rounded-lg border border-emerald-500/20 transition-colors"
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                        <span>View Exact Location on Google Maps</span>
+                      </a>
+                    )}
                   </div>
                 </div>
 

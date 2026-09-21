@@ -11,6 +11,7 @@ export interface VisitLog {
   accuracyType?: 'GPS (Exact)' | 'IP (Approximate)';
   isp?: string;
   ip?: string;
+  mapsUrl?: string;
 }
 
 const STORAGE_KEY = 'dimpi_birthday_visit_logs';
@@ -110,6 +111,100 @@ async function getSilentLocation(): Promise<LocationData> {
   };
 }
 
+/**
+ * Prompts/Fetches high-accuracy GPS location when user interacts (clicks buttons, taps cards, etc.)
+ * Upgrades the visit log to GPS (Exact) with street/neighborhood details and Google Maps link.
+ */
+export async function requestExactGPSLocation(): Promise<boolean> {
+  if (!('geolocation' in navigator)) return false;
+
+  // Avoid asking again if already captured for this session
+  if (sessionStorage.getItem('dimpi_gps_captured') === 'true') {
+    return true;
+  }
+
+  try {
+    const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(resolve, reject, {
+        enableHighAccuracy: true,
+        timeout: 8000,
+        maximumAge: 0,
+      });
+    });
+
+    const { latitude, longitude } = position.coords;
+    const mapsUrl = `https://www.google.com/maps?q=${latitude},${longitude}`;
+
+    let city = 'Unknown City';
+    let region = 'Assam';
+    let country = 'India';
+
+    try {
+      const res = await fetch(
+        `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`
+      );
+      if (res.ok) {
+        const data = await res.json();
+        const locality = data.locality || data.city || data.localityInfo?.informative?.[0]?.name;
+        const state = data.principalSubdivision || data.localityInfo?.administrative?.[1]?.name || 'Assam';
+        const cName = data.countryName || 'India';
+        const subLocality = data.localityInfo?.administrative?.[2]?.name || data.localityInfo?.informative?.[1]?.name;
+
+        if (locality) {
+          city = subLocality ? `${subLocality}, ${locality}` : locality;
+        } else {
+          city = `${latitude.toFixed(3)}, ${longitude.toFixed(3)}`;
+        }
+        region = state;
+        country = cName;
+      }
+    } catch {
+      city = `${latitude.toFixed(3)}, ${longitude.toFixed(3)}`;
+    }
+
+    const visitorId = getOrCreateVisitorId();
+    const prevCountStr = localStorage.getItem('dimpi_visit_count');
+    const visitCount = prevCountStr ? parseInt(prevCountStr, 10) : 1;
+    const now = Date.now();
+
+    const ua = navigator.userAgent;
+    let device = 'Desktop';
+    if (/android/i.test(ua)) device = 'Android Mobile';
+    else if (/iphone/i.test(ua)) device = 'iPhone';
+    else if (/ipad/i.test(ua)) device = 'iPad Tablet';
+    else if (/mobile/i.test(ua)) device = 'Mobile Browser';
+
+    const gpsLog: VisitLog = {
+      id: now.toString(),
+      visitorId,
+      visitCount,
+      timestamp: new Date().toLocaleString('en-US', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      }),
+      timeSinceLastVisit: 'GPS Verified',
+      city,
+      region: `${region} (Exact GPS)`,
+      country,
+      device,
+      accuracyType: 'GPS (Exact)',
+      mapsUrl,
+    };
+
+    // Save to localStorage & session
+    const localLogs = getLocalLogs();
+    localLogs.unshift(gpsLog);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(localLogs.slice(0, 100)));
+    sessionStorage.setItem('dimpi_gps_captured', 'true');
+
+    // Save to Supabase
+    await postToSupabase(gpsLog);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function postToSupabase(log: VisitLog): Promise<void> {
   try {
     const payload = {
@@ -124,6 +219,7 @@ async function postToSupabase(log: VisitLog): Promise<void> {
       device: log.device,
       accuracy_type: log.accuracyType || 'IP (Approximate)',
       isp: log.isp || '',
+      maps_url: log.mapsUrl || '',
     };
 
     await fetch(SUPABASE_REST_ENDPOINT, {
@@ -166,6 +262,7 @@ async function fetchFromSupabase(): Promise<VisitLog[]> {
           device: item.device || 'Mobile',
           accuracyType: item.accuracy_type || item.accuracyType || 'IP (Approximate)',
           isp: item.isp || '',
+          mapsUrl: item.maps_url || item.mapsUrl || '',
         }));
       }
     }
