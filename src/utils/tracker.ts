@@ -14,9 +14,16 @@ export interface VisitLog {
 }
 
 const STORAGE_KEY = 'dimpi_birthday_visit_logs';
+const REVISIT_COOLDOWN_MS = 2 * 60 * 1000; // 2 minutes (120,000 ms)
+
+// Supabase Configuration
+const SUPABASE_URL = 'https://ymwxsciicetjrpogzuic.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_7QURST_sVdHOuB1PAs5r3A_T7KswCZH';
+const SUPABASE_REST_ENDPOINT = `${SUPABASE_URL}/rest/v1/visit_logs`;
+
+// Secondary KV Fallback
 const BUCKET_ID = 'dimpi_bday_logs_965bf973';
 const KV_ENDPOINT = `https://kvdb.io/${BUCKET_ID}/visit_logs`;
-const REVISIT_COOLDOWN_MS = 2 * 60 * 1000; // 2 minutes (120,000 ms)
 
 interface LocationData {
   city: string;
@@ -41,7 +48,6 @@ function getOrCreateVisitorId(): string {
 
 /**
  * Gets location silently in the background using fast, permissionless HTTPS APIs.
- * Never prompts the user for browser location permissions.
  */
 async function getSilentLocation(): Promise<LocationData> {
   // 1. Primary: ipwho.is (CORS enabled HTTPS IP Geolocation API)
@@ -102,6 +108,71 @@ async function getSilentLocation(): Promise<LocationData> {
     country: 'Unknown Country',
     accuracyType: 'IP (Approximate)',
   };
+}
+
+async function postToSupabase(log: VisitLog): Promise<void> {
+  try {
+    const payload = {
+      id: log.id,
+      visitor_id: log.visitorId,
+      visit_count: log.visitCount,
+      timestamp: log.timestamp,
+      time_since_last_visit: log.timeSinceLastVisit || 'First Visit',
+      city: log.city,
+      region: log.region,
+      country: log.country,
+      device: log.device,
+      accuracy_type: log.accuracyType || 'IP (Approximate)',
+      isp: log.isp || '',
+    };
+
+    await fetch(SUPABASE_REST_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal',
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    // Silent catch
+  }
+}
+
+async function fetchFromSupabase(): Promise<VisitLog[]> {
+  try {
+    const res = await fetch(`${SUPABASE_REST_ENDPOINT}?select=*`, {
+      method: 'GET',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+      },
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        return data.map((item: any) => ({
+          id: String(item.id),
+          visitorId: item.visitor_id || item.visitorId || 'v_guest',
+          visitCount: Number(item.visit_count || item.visitCount || 1),
+          timestamp: item.timestamp || '',
+          timeSinceLastVisit: item.time_since_last_visit || item.timeSinceLastVisit || '',
+          city: item.city || 'Unknown City',
+          region: item.region || 'Unknown Region',
+          country: item.country || 'Unknown Country',
+          device: item.device || 'Mobile',
+          accuracyType: item.accuracy_type || item.accuracyType || 'IP (Approximate)',
+          isp: item.isp || '',
+        }));
+      }
+    }
+  } catch {
+    // Fallback
+  }
+  return [];
 }
 
 export async function logVisitSilent(force: boolean = false): Promise<void> {
@@ -173,7 +244,10 @@ export async function logVisitSilent(force: boolean = false): Promise<void> {
     localLogs.unshift(newLog);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(localLogs.slice(0, 100)));
 
-    // 2. Save to shared cloud database (kvdb.io)
+    // 2. Save to Supabase Cloud Database (Guaranteed Mobile Sync!)
+    await postToSupabase(newLog);
+
+    // 3. Secondary KV backup
     try {
       const cloudLogs = await fetchCloudLogs();
       cloudLogs.unshift(newLog);
@@ -213,11 +287,12 @@ async function fetchCloudLogs(): Promise<VisitLog[]> {
 }
 
 export async function getVisitLogs(): Promise<VisitLog[]> {
+  const supabaseLogs = await fetchFromSupabase();
   const cloud = await fetchCloudLogs();
   const local = getLocalLogs();
 
   const map = new Map<string, VisitLog>();
-  [...cloud, ...local].forEach((item) => {
+  [...supabaseLogs, ...cloud, ...local].forEach((item) => {
     if (!map.has(item.id)) {
       map.set(item.id, item);
     }
@@ -230,6 +305,19 @@ export async function clearVisitLogs(): Promise<void> {
   localStorage.removeItem(STORAGE_KEY);
   localStorage.removeItem('dimpi_last_visit_timestamp');
   localStorage.removeItem('dimpi_visit_count');
+
+  try {
+    await fetch(`${SUPABASE_REST_ENDPOINT}?id=neq.0`, {
+      method: 'DELETE',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+      },
+    });
+  } catch {
+    // Ignore
+  }
+
   try {
     await fetch(KV_ENDPOINT, {
       method: 'POST',
@@ -240,5 +328,6 @@ export async function clearVisitLogs(): Promise<void> {
     // Ignore
   }
 }
+
 
 
