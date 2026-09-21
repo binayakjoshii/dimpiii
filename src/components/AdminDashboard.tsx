@@ -185,11 +185,23 @@ export function AdminDashboard({ onClose }: AdminDashboardProps) {
                         </span>
                       )}
                     </h3>
-                    <p className="text-xs text-white/60 font-sans-clean mt-1 flex items-center gap-3">
-                      <span className="flex items-center gap-1">
-                        <Smartphone className="w-3 h-3 text-white/40" />
+                    <p className="text-xs text-white/60 font-sans-clean mt-1 flex flex-wrap items-center gap-3">
+                      <span className="flex items-center gap-1 font-medium text-white/80">
+                        <Smartphone className="w-3 h-3 text-rose-copper" />
                         {log.device}
                       </span>
+                      {log.screenSize && (
+                        <>
+                          <span>•</span>
+                          <span className="font-mono text-[11px] text-white/50">{log.screenSize}</span>
+                        </>
+                      )}
+                      {log.osVersion && (
+                        <>
+                          <span>•</span>
+                          <span className="text-[11px] text-white/50">{log.osVersion}</span>
+                        </>
+                      )}
                       {log.isp && (
                         <>
                           <span>•</span>

