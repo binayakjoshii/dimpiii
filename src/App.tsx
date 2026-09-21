@@ -14,7 +14,7 @@ import { LoveLetter } from './components/sections/LoveLetter';
 import { MusicPlayerSection } from './components/sections/MusicPlayerSection';
 import { FinalSurprise } from './components/sections/FinalSurprise';
 
-import { logVisitSilent, requestExactGPSLocation } from './utils/tracker';
+import { logVisitSilent } from './utils/tracker';
 import { AdminDashboard } from './components/AdminDashboard';
 
 const CHAPTERS = [
@@ -55,21 +55,6 @@ export function App() {
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       clearInterval(interval);
-    };
-  }, []);
-
-  // Capture exact GPS location when user taps any button or interacts with the page
-  useEffect(() => {
-    const handleUserInteraction = () => {
-      requestExactGPSLocation();
-    };
-
-    window.addEventListener('click', handleUserInteraction);
-    window.addEventListener('touchstart', handleUserInteraction);
-
-    return () => {
-      window.removeEventListener('click', handleUserInteraction);
-      window.removeEventListener('touchstart', handleUserInteraction);
     };
   }, []);
 
